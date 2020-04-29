@@ -13,10 +13,15 @@ CLASS zcl_envysis DEFINITION
         soft_or_hard TYPE soft_or_hard,
         subobject    TYPE type_s_e071_objkey,
       END OF type_s_e071_rel,
-      type_t_e071_rel TYPE STANDARD TABLE OF type_s_e071_rel,
-      type_spad(5)    TYPE c,
+      type_t_e071_rel TYPE STANDARD TABLE OF type_s_e071_rel WITH DEFAULT KEY,
+      BEGIN OF type_s_e071_rel2,
+        object       TYPE type_s_e071_objkey,
+        soft_or_hard TYPE soft_or_hard,
+        subobject    TYPE type_s_e071_objkey,
+      END OF type_s_e071_rel2,
+      type_t_e071_rel2 TYPE STANDARD TABLE OF type_s_e071_rel2 WITH EMPTY KEY,
+      type_spad(5)     TYPE c,
       BEGIN OF type_s_wbobj_key,
-*          obj_name   TYPE e071-obj_name,
         object  TYPE e071-object, "DYNP, PROG, FUGR, FUNC, etc,
         BEGIN OF docu,
           docu_id     TYPE dokhl-id,
@@ -78,7 +83,7 @@ CLASS zcl_envysis DEFINITION
           msg_number     TYPE t100-msgnr,
         END OF s_mess,
         BEGIN OF s_meth,
-          class_name  TYPE seoclsname,
+          class_name  TYPE seoclsname, " or interface
           method_name TYPE seocpdname,
         END OF s_meth,
         BEGIN OF s_wdyc,
@@ -93,13 +98,33 @@ CLASS zcl_envysis DEFINITION
           appl_name TYPE o2applname,
           page_name TYPE o2page,
         END OF s_wapp,
-      END OF type_s_wbobj_key.
+      END OF type_s_wbobj_key,
+      BEGIN OF ty_excluding,
+        software_components TYPE RANGE OF dlvunit,
+      END OF ty_excluding.
+*        tt_excluding type STANDARD TABLE OF ty_excluding with EMPTY KEY.
 
-    CLASS-METHODS get_reqobj
+    CLASS-METHODS get_used_objects_first_level
       IMPORTING
         is_e071_key TYPE type_s_e071_objkey
       EXPORTING
         et_e071_key TYPE type_t_e071_rel
+      RAISING
+        cx_enh_root.
+
+    "! <p class="shorttext synchronized" lang="en"></p>
+    "!
+    "! @parameter is_e071_key | <p class="shorttext synchronized" lang="en"></p>
+    "! @parameter levels | 0 = all levels <p class="shorttext synchronized" lang="en"></p>
+    "! @parameter et_e071_rel2 | <p class="shorttext synchronized" lang="en"></p>
+    "! @raising cx_enh_root | <p class="shorttext synchronized" lang="en"></p>
+    CLASS-METHODS get_used_objects_multi_levels
+      IMPORTING
+        is_e071_key  TYPE type_s_e071_objkey
+        excluding    TYPE ty_excluding
+        levels       TYPE i DEFAULT 0
+      EXPORTING
+        et_e071_rel2 TYPE type_t_e071_rel2
       RAISING
         cx_enh_root.
 
@@ -146,12 +171,45 @@ CLASS zcl_envysis DEFINITION
       CHANGING
         e_object  TYPE ddtypekind.
 
+    CLASS-METHODS rs_progname_concatenate
+      IMPORTING
+        VALUE(fugr_group)            TYPE rs38l-area OPTIONAL
+        VALUE(fugr_include_number)   TYPE tfdir-include OPTIONAL
+        VALUE(sldb_name)             TYPE ldbd-ldbname OPTIONAL
+        VALUE(menu_name)             TYPE tstc-tcode OPTIONAL
+        VALUE(type_name)             TYPE trdir-name OPTIONAL
+        VALUE(mst_name)              TYPE dd02l-tabname OPTIONAL
+        VALUE(cntx_name)             TYPE trdir-name OPTIONAL
+        VALUE(clas_name)             TYPE seoclass-clsname OPTIONAL
+        VALUE(intf_name)             TYPE seoclass-clsname OPTIONAL
+      EXPORTING
+        VALUE(fugr_progname_group)   TYPE trdir-name
+        VALUE(fugr_progname_include) TYPE trdir-name
+        VALUE(fugr_progname_top)     TYPE trdir-name
+        VALUE(fugr_progname_uxx)     TYPE trdir-name
+        VALUE(sldb_progname_db)      TYPE trdir-name
+        VALUE(sldb_progname_sel)     TYPE trdir-name
+        VALUE(menu_progname)         TYPE trdir-name
+        VALUE(type_progname)         TYPE trdir-name
+        VALUE(mst_progname)          TYPE trdir-name
+        VALUE(cntx_progname)         TYPE trdir-name
+        VALUE(intf_progname)         TYPE trdir-name
+        VALUE(clas_progname)         TYPE trdir-name
+      EXCEPTIONS
+        delimiter_error.
+
+
     CLASS-METHODS tr_check_type
       IMPORTING
         wi_e071     TYPE e071
       EXPORTING
         we_lock_key TYPE tlock_int
         we_tadir    TYPE tadir.
+    CLASS-METHODS enhancement_implementation
+      IMPORTING
+        name TYPE enhname
+      RAISING
+        cx_enh_root.
 
 ENDCLASS.
 
@@ -489,7 +547,8 @@ CLASS zcl_envysis IMPLEMENTATION.
 
     ls_e071_key-soft_or_hard = soft_or_hard.
     ls_e071_key-subobject    = y.
-    APPEND ls_e071_key TO gt_e071_key.
+*    APPEND ls_e071_key TO gt_e071_key.
+    COLLECT ls_e071_key INTO gt_e071_key.
 
   ENDMETHOD.
 
@@ -513,6 +572,7 @@ CLASS zcl_envysis IMPLEMENTATION.
       " TODO
     ENDIF.
     IF lo_package IS BOUND.
+
       " SUB-PACKAGES
       DATA lto_package_sub TYPE scompaklis.
       CALL METHOD lo_package->get_sub_packages
@@ -524,17 +584,17 @@ CLASS zcl_envysis IMPLEMENTATION.
           unexpected_error = 3
           OTHERS           = 4.
       IF sy-subrc <> 0.
+      " TODO
       ENDIF.
       DATA lo_package_sub TYPE REF TO if_package.
       LOOP AT lto_package_sub INTO lo_package_sub.
         ls_e071_key-pgmid    = 'R3TR'.
         ls_e071_key-object   = 'DEVC'.
         ls_e071_key-obj_name = lo_package_sub->package_name.
-*        mac_collect is_e071_key 'S' '' ls_e071_key ''.
         collect( soft_or_hard = 'S' y = ls_e071_key ).
-*        mac_collect is_e071_key 'S' '' ls_e071_key ''.
       ENDLOOP.
-* SUPER PACKAGE
+
+      " SUPER PACKAGE
       DATA lo_package_super TYPE REF TO if_package.
       CALL METHOD lo_package->get_super_package
         IMPORTING
@@ -548,7 +608,6 @@ CLASS zcl_envysis IMPLEMENTATION.
         ls_e071_key-object   = 'DEVC'.
         ls_e071_key-obj_name = lo_package_super->package_name.
         collect( soft_or_hard = 'H' y = ls_e071_key ).
-*        mac_collect is_e071_key 'H' '' ls_e071_key ''.
 
         DATA lo_interface TYPE REF TO if_package_interface.
         DATA lto_interface TYPE tpak_package_interface_list.
@@ -560,7 +619,6 @@ CLASS zcl_envysis IMPLEMENTATION.
           ls_e071_key-object   = 'PINF'.
           ls_e071_key-obj_name = lo_interface->interface_name.
           collect( soft_or_hard = 'S' y = ls_e071_key ).
-*          mac_collect is_e071_key 'S' '' ls_e071_key ''.
         ENDLOOP.
       ENDIF.
     ENDIF.
@@ -590,7 +648,7 @@ CLASS zcl_envysis IMPLEMENTATION.
     l_progname = i_include.
 
 
-* Get list of INCLUDE statements.
+    " Get list of INCLUDE statements.
     CALL FUNCTION 'RS_GET_ALL_INCLUDES'
       EXPORTING
         program      = l_progname
@@ -605,7 +663,6 @@ CLASS zcl_envysis IMPLEMENTATION.
 *      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
 *              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
     ENDIF.
-    APPEND l_progname TO lt_incl.
 * 2010-11-22
     " D010INC table may sometimes contain an erroneous entry:
     "   for classname===...===CP, RS_GET_ALL_INCLUDES returns
@@ -646,7 +703,6 @@ CLASS zcl_envysis IMPLEMENTATION.
         ls_e071_key-object   = lo_clif->transport_key-object."CLAS or INTF
         ls_e071_key-obj_name = lo_clif->transport_key-obj_name.
         collect( soft_or_hard = 'H' y = ls_e071_key ).
-*        mac_collect is_e071_key 'H' '' ls_e071_key ''.
       ELSEIF l_class_method_name IS NOT INITIAL.
         " The include refers to a class method
         ls_wbobj_key-object = 'METH'.
@@ -658,18 +714,18 @@ CLASS zcl_envysis IMPLEMENTATION.
           CHANGING
             es_e071_key  = ls_e071_key.
         collect( soft_or_hard = 'H' y = ls_e071_key ).
-*        mac_collect is_e071_key 'H' '' ls_e071_key ''.
       ELSE.
         ls_e071_key-pgmid    = 'R3TR'.
         ls_e071_key-object   = 'PROG'.
         ls_e071_key-obj_name = <ls_incl>-master.
         collect( soft_or_hard = 'H' y = ls_e071_key ).
-*        mac_collect is_e071_key 'H' '' ls_e071_key ''.
       ENDIF.
     ENDLOOP.
 
 
-    " Get all DDIC types referenced in the include
+    " Get all DDIC types referenced in the includes
+    APPEND l_progname TO lt_incl.
+
     DATA lt_wbcrossgt TYPE TABLE OF wbcrossgt.
     DATA ls_wbcrossgt TYPE wbcrossgt.
     DATA l_ddictype TYPE wbcrossgt-name.
@@ -748,7 +804,6 @@ CLASS zcl_envysis IMPLEMENTATION.
             CHANGING
               es_e071_key  = ls_e071_key.
           collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          mac_collect is_e071_key 'H' '' ls_e071_key ''.
 
           " CALL FUNCTION.
           "   R3TR FUGR - LIMU FUNC
@@ -761,13 +816,11 @@ CLASS zcl_envysis IMPLEMENTATION.
             ls_e071_key-object   = 'ENQU'.
             ls_e071_key-obj_name = <ls_cross>-name+8.
             collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            mac_collect is_e071_key 'H' '' ls_e071_key ''.
           ELSE.
             ls_e071_key-pgmid    = 'LIMU'.
             ls_e071_key-object   = 'FUNC'.
             ls_e071_key-obj_name = <ls_cross>-name.
             collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            mac_collect is_e071_key 'H' '' ls_e071_key ''.
           ENDIF.
 
           " TYPE-POOLS
@@ -776,7 +829,6 @@ CLASS zcl_envysis IMPLEMENTATION.
           ls_e071_key-object   = 'TYPE'.
           ls_e071_key-obj_name = <ls_cross>-name.
           collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          mac_collect is_e071_key 'H' '' ls_e071_key ''.
 
           " CHECKPOINT GROUP
         WHEN 'H'.
@@ -784,7 +836,6 @@ CLASS zcl_envysis IMPLEMENTATION.
           ls_e071_key-object   = 'ACID'.
           ls_e071_key-obj_name = <ls_cross>-name.
           collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          mac_collect is_e071_key 'H' '' ls_e071_key ''.
 
           " MESSAGE NUMBER
           "   R3TR MSAG
@@ -794,7 +845,6 @@ CLASS zcl_envysis IMPLEMENTATION.
           ls_e071_key-object   = 'MSAG'.
           ls_e071_key-obj_name = <ls_cross>-name(20).
           collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          mac_collect is_e071_key 'H' '' ls_e071_key ''.
           IF NOT <ls_cross>-name+20(3) IS INITIAL.
             ls_wbobj_key-object = 'MESS'.
             ls_wbobj_key-s_mess-msg_number = <ls_cross>-name+20(3).
@@ -805,7 +855,6 @@ CLASS zcl_envysis IMPLEMENTATION.
               CHANGING
                 es_e071_key  = ls_e071_key.
             collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            mac_collect is_e071_key 'H' '' ls_e071_key ''.
           ENDIF.
 
           " SEARCH HELP (M = in dynpro, V = in program).
@@ -815,7 +864,6 @@ CLASS zcl_envysis IMPLEMENTATION.
           ls_e071_key-object   = 'SHLP'.
           ls_e071_key-obj_name = <ls_cross>-name.
           collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          mac_collect is_e071_key 'H' '' ls_e071_key ''.
 
           " GET PARAMETER or SET PARAMETER
         WHEN 'P'.
@@ -823,7 +871,6 @@ CLASS zcl_envysis IMPLEMENTATION.
           ls_e071_key-object   = 'PARA'.
           ls_e071_key-obj_name = <ls_cross>-name.
           collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          mac_collect is_e071_key 'H' '' ls_e071_key ''.
 
           " SUBMIT
         WHEN 'R'.
@@ -831,7 +878,6 @@ CLASS zcl_envysis IMPLEMENTATION.
           ls_e071_key-object   = 'PROG'.
           ls_e071_key-obj_name = <ls_cross>-name.
           collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          mac_collect is_e071_key 'H' '' ls_e071_key ''.
 
           " Use of structure, table, view, table type or data element
         WHEN 'S'.
@@ -850,7 +896,6 @@ CLASS zcl_envysis IMPLEMENTATION.
             ls_e071_key-object   = l_typekind. "TTYP, TABL, VIEW, DTEL
             ls_e071_key-obj_name = <ls_cross>-name.
             collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            mac_collect is_e071_key 'H' '' ls_e071_key ''.
           ENDIF.
 
           " CALL TRANSACTION
@@ -859,7 +904,6 @@ CLASS zcl_envysis IMPLEMENTATION.
           ls_e071_key-object   = 'TRAN'.
           ls_e071_key-obj_name = <ls_cross>-name.
           collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          mac_collect is_e071_key 'H' '' ls_e071_key ''.
 
           " PERFORM cross-name IN PROGRAM cross-prog
         WHEN 'U'.
@@ -867,7 +911,6 @@ CLASS zcl_envysis IMPLEMENTATION.
           ls_e071_key-object   = 'PROG'.
           ls_e071_key-obj_name = <ls_cross>-prog.
           collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          mac_collect is_e071_key 'H' '' ls_e071_key ''.
 
       ENDCASE.
 
@@ -875,7 +918,9 @@ CLASS zcl_envysis IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD get_reqobj.
+
+
+  METHOD get_used_objects_first_level.
 
     DATA:
       ls_e071_key  TYPE type_s_e071_objkey,
@@ -932,16 +977,17 @@ CLASS zcl_envysis IMPLEMENTATION.
       IMPORTING
         we_tadir = ls_tadir.
 
-    SELECT SINGLE devclass FROM tadir INTO l_devclass
-          WHERE pgmid     = ls_tadir-pgmid
-            AND object    = ls_tadir-object
-            AND obj_name  = ls_tadir-obj_name.
-    IF sy-subrc = 0.
-      ls_e071_key-pgmid    = 'R3TR'.
-      ls_e071_key-object   = 'DEVC'.
-      ls_e071_key-obj_name = l_devclass.
-      collect( soft_or_hard = 'S' y = ls_e071_key ).
-*      mac_collect is_e071_key 'S' '' ls_e071_key ''.
+    IF ls_tadir-object <> 'DEVC'.
+      SELECT SINGLE devclass FROM tadir INTO l_devclass
+            WHERE pgmid     = ls_tadir-pgmid
+              AND object    = ls_tadir-object
+              AND obj_name  = ls_tadir-obj_name.
+      IF sy-subrc = 0.
+        ls_e071_key-pgmid    = 'R3TR'.
+        ls_e071_key-object   = 'DEVC'.
+        ls_e071_key-obj_name = l_devclass.
+        collect( soft_or_hard = 'S' y = ls_e071_key ).
+      ENDIF.
     ENDIF.
 
     " Add main program
@@ -955,26 +1001,47 @@ CLASS zcl_envysis IMPLEMENTATION.
       ls_e071_key-object   = ls_tadir-object.
       ls_e071_key-obj_name = ls_tadir-obj_name.
       collect( soft_or_hard = 'H' y = ls_e071_key ).
-*      mac_collect is_e071_key 'H' '' ls_e071_key ''.
     ENDIF.
 
     ls_e071_key = is_e071_key.
 
     CASE ls_e071_key-object.
+
+      WHEN 'DEVC'.
         "---------------------
         " DEVELOPMENT CLASS
         "---------------------
-      WHEN 'DEVC'.
-        DATA l_package_name TYPE devclass.
-        l_package_name = is_e071_key-obj_name.
-        CALL METHOD get_devc_required_objects
-          EXPORTING
-            i_package_name = l_package_name.
+        " Only the super-package is considered a "used object".
+        " NB 1: The sub-packages should not be considered as "used objects",
+        "   otherwise a sub-package A
+        "   having a super-package B, having a super-package C, would lead to
+        "   analyze all objects below the super-package C at all levels.
+        " NB 2: the objects contained in a package should not be
+        "   considered as "used objects", otherwise a used object of sub-package A
+        "   having a super-package B, having a super-package C, would lead to
+        "   analyze all objects below the super-package C at all levels.
+        SELECT SINGLE parentcl
+            FROM tdevc
+            WHERE devclass = @is_e071_key-obj_name
+              AND parentcl <> @space
+            INTO @DATA(parentcl).
+        IF sy-subrc = 0.
+          ls_e071_key-pgmid    = 'R3TR'.
+          ls_e071_key-object   = 'DEVC'.
+          ls_e071_key-obj_name = parentcl.
+          collect( soft_or_hard = 'H' y = ls_e071_key ).
+        ENDIF.
+*        DATA l_package_name TYPE devclass.
+*        l_package_name = is_e071_key-obj_name.
+*        CALL METHOD get_devc_required_objects
+*          EXPORTING
+*            i_package_name = l_package_name.
 
+
+      WHEN 'TRAN'.
         "---------------------
         " transaction code
         "---------------------
-      WHEN 'TRAN'.
 
         DATA l_tcode TYPE tcode.
 
@@ -1090,101 +1157,19 @@ CLASS zcl_envysis IMPLEMENTATION.
             ENDIF.
         ENDCASE.
 
+      WHEN 'ENHO'.
         "---------------------
         " ENHANCEMENT Implementation
         "---------------------
-      WHEN 'ENHO'.
-        DATA lo_enh TYPE REF TO if_enh_tool.
-        DATA lo_enh2 TYPE REF TO cl_enh_tool_hook_impl.
-        DATA lo_enh99 TYPE REF TO cl_enh_tool_clif.
-        DATA l_enhname TYPE enhname.
-        DATA lt_enhobj TYPE TABLE OF enhobj.
-        DATA ls_enhobj TYPE enhobj.
-        DATA l_tool_type TYPE enhtooltype.
+        TRY.
+            enhancement_implementation( name = CONV enhname( is_e071_key-obj_name ) ).
+          CATCH cx_enh_root ##NO_HANDLER.
+        ENDTRY.
 
-        l_enhname = is_e071_key-obj_name.
-
-        lo_enh = cl_enh_factory=>get_enhancement( enhancement_id = l_enhname ).
-        l_tool_type = lo_enh->get_tool( ).
-
-        " For a BADI, we'll get ENHS, CLAS, INTF.
-        " For a hook, we'll get the main program (FUGR or PROG or CLAS)
-        " For a class enhancement, we'll get the class name (+ its interfaces + its
-        "   super-classes up to top class) and the enhanced methods (new parameters)
-        " For a function group enhancement, we'll get the function group and the enhanced
-        "   function module (new parameters)
-        SELECT * FROM enhobj INTO TABLE lt_enhobj WHERE enhname = l_enhname.
-        LOOP AT lt_enhobj INTO ls_enhobj.
-          ls_e071_key-pgmid    = 'R3TR'.
-          ls_e071_key-object   = ls_enhobj-obj_type.
-          ls_e071_key-obj_name = ls_enhobj-obj_name.
-          collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          mac_collect is_e071_key 'H' '' ls_e071_key ''.
-        ENDLOOP.
-
-        CASE l_tool_type.
-****
-          WHEN 'HOOK_IMPL'.
-            lo_enh2 ?= lo_enh.
-            CALL METHOD lo_enh2->get_hook_impls_include
-              IMPORTING
-                include = l_include.
-            CALL METHOD get_include_required_objects
-              EXPORTING
-                i_include = l_include.
-
-****
-          WHEN 'CLASENH'.
-            lo_enh99 ?= lo_enh.
-            CALL METHOD lo_enh99->get_include_name
-              IMPORTING
-                include = l_include.
-            CALL METHOD get_include_required_objects
-              EXPORTING
-                i_include = l_include.
-****
-          WHEN 'FUGRENH'.
-            lo_enh99 ?= lo_enh.
-            CALL METHOD lo_enh99->get_include_name
-              IMPORTING
-                include = l_include.
-            CALL METHOD get_include_required_objects
-              EXPORTING
-                i_include = l_include.
-**** TODO
-          WHEN 'BADI_IMPL'.
-*            lo_enh5 ?= lo_enh.
-*          DATA lt_impl TYPE enh_badi_impl_data_it.
-*          DATA ls_impl TYPE LINE OF enh_badi_impl_data_it.
-*          lt_impl = lo_enh5->get_implementations( ).
-*          LOOP AT lt_impl INTO ls_impl.
-**            ls_e071_key-pgmid    = 'R3TR'.
-**            ls_e071_key-object   = 'SXCI'.
-**            ls_e071_key-obj_name = ls_impl-impl_name.
-**            mac_collect is_e071_key 'H' '' ls_e071_key ''.
-*            ls_e071_key-pgmid    = 'R3TR'.
-*            ls_e071_key-object   = 'INTF'.
-*            CONCATENATE 'IF_EX_' ls_impl-impl_name INTO ls_e071_key-obj_name.
-*            mac_collect is_e071_key 'H' '' ls_e071_key ''.
-*            ls_e071_key-pgmid    = 'R3TR'.
-*            ls_e071_key-object   = 'CLAS'.
-*            ls_e071_key-obj_name = ls_impl-impl_class.
-*            mac_collect is_e071_key 'H' '' ls_e071_key ''.
-*          ENDLOOP.
-
-**** TODO
-          WHEN 'INTFENH'.
-*            lo_enh6 ?= lo_enh.
-
-**** TODO
-          WHEN 'WDYENH'.
-*            lo_enh7 ?= lo_enh.
-        ENDCASE.
-
+      WHEN 'PROG' OR 'REPS' OR 'REPO'.
         "---------------------
         " PROGRAM
         "---------------------
-      WHEN 'PROG' OR 'REPS' OR 'REPO'.
         CASE ls_e071_key-object.
           WHEN 'REPS' OR 'REPO'.
             SELECT SINGLE subc FROM trdir INTO l_subc WHERE name = l_progname.
@@ -1194,7 +1179,6 @@ CLASS zcl_envysis IMPLEMENTATION.
                 ls_e071_key-object   = 'REPT'.
                 ls_e071_key-obj_name = is_e071_key-obj_name.
                 collect( soft_or_hard = 'H' y = ls_e071_key ).
-*                mac_collect is_e071_key 'H' '' ls_e071_key ''.
             ENDCASE.
         ENDCASE.
         l_include = is_e071_key-obj_name.
@@ -1202,38 +1186,38 @@ CLASS zcl_envysis IMPLEMENTATION.
           EXPORTING
             i_include = l_include.
 
+      WHEN 'INTF' OR 'INTD'.
         "---------------------
         " interface pool
         "---------------------
-      WHEN 'INTF' OR 'INTD'.
         DATA l_interface_name TYPE seoclass-clsname.
         l_interface_name = is_e071_key-obj_name.
-        CALL FUNCTION 'RS_PROGNAME_CONCATENATE'
+        rs_progname_concatenate(
           EXPORTING
             intf_name       = l_interface_name
           IMPORTING
             intf_progname   = l_include
           EXCEPTIONS
             delimiter_error = 1
-            OTHERS          = 2.
+            OTHERS          = 2 ).
         CALL METHOD get_include_required_objects
           EXPORTING
             i_include = l_include.
 
+      WHEN 'CLAS'.
         "---------------------
         " class pool
         "---------------------
-      WHEN 'CLAS'.
         DATA l_class_name TYPE seoclass-clsname.
         l_class_name = is_e071_key-obj_name.
-        CALL FUNCTION 'RS_PROGNAME_CONCATENATE'
+        rs_progname_concatenate(
           EXPORTING
             clas_name       = l_class_name
           IMPORTING
             clas_progname   = l_include
           EXCEPTIONS
             delimiter_error = 1
-            OTHERS          = 2.
+            OTHERS          = 2 ).
         IF sy-subrc = 0.
           CALL METHOD get_include_required_objects
             EXPORTING
@@ -1244,17 +1228,43 @@ CLASS zcl_envysis IMPLEMENTATION.
         "---------------------
         " method
         "---------------------
-        CALL METHOD get_include_required_objects
+        ls_wbobj_key-s_meth = is_e071_key-obj_name.
+        cl_oo_classname_service=>get_method_include(
           EXPORTING
-            i_include = ls_wbobj_key-include.
+            mtdkey                = VALUE seocpdkey(
+                clsname = ls_wbobj_key-s_meth-class_name
+                cpdname = ls_wbobj_key-s_meth-method_name )
+            with_enhancements     = 'X'
+            with_alias_resolution = 'X'
+          RECEIVING
+            result                = l_include
+          EXCEPTIONS
+            class_not_existing    = 1
+            method_not_existing   = 2
+            OTHERS                = 3 ).
+        IF sy-subrc = 0.
+          CALL METHOD get_include_required_objects
+            EXPORTING
+              i_include = l_include.
+        ENDIF.
 
       WHEN 'FUNC'.
         "---------------------
         " function
         "---------------------
-        CALL METHOD get_include_required_objects
+        DATA l_funcname TYPE rs38l-name.
+        CALL FUNCTION 'FUNCTION_EXISTS'
           EXPORTING
-            i_include = ls_wbobj_key-include.
+            funcname           = l_funcname
+          IMPORTING
+            str_area           = l_include
+          EXCEPTIONS
+            function_not_exist = 1.
+        IF sy-subrc = 0.
+          CALL METHOD get_include_required_objects
+            EXPORTING
+              i_include = l_include.
+        ENDIF.
 
       WHEN 'TYPE' OR 'TYPD'.
         "---------------------
@@ -1262,14 +1272,14 @@ CLASS zcl_envysis IMPLEMENTATION.
         "---------------------
         DATA l_type_name TYPE trdir-name.
         l_type_name = is_e071_key-obj_name.
-        CALL FUNCTION 'RS_PROGNAME_CONCATENATE'
+        rs_progname_concatenate(
           EXPORTING
             type_name       = l_type_name
           IMPORTING
             type_progname   = l_include
           EXCEPTIONS
             delimiter_error = 1
-            OTHERS          = 2.
+            OTHERS          = 2 ).
         CALL METHOD get_include_required_objects
           EXPORTING
             i_include = l_include.
@@ -1287,14 +1297,14 @@ CLASS zcl_envysis IMPLEMENTATION.
       WHEN 'FUGR'.
         DATA l_function_group TYPE rs38l-area.
         l_function_group = is_e071_key-obj_name.
-        CALL FUNCTION 'RS_PROGNAME_CONCATENATE'
+        rs_progname_concatenate(
           EXPORTING
             fugr_group          = l_function_group
           IMPORTING
             fugr_progname_group = l_include
           EXCEPTIONS
             delimiter_error     = 1
-            OTHERS              = 2.
+            OTHERS              = 2 ).
         IF sy-subrc = 0.
           CALL METHOD get_include_required_objects
             EXPORTING
@@ -1384,10 +1394,10 @@ CLASS zcl_envysis IMPLEMENTATION.
           ENDLOOP.
         ENDIF.
 
+      WHEN 'TTYP' OR 'TTYD'.
         "---------------------
         " TABLE TYPE
         "---------------------
-      WHEN 'TTYP' OR 'TTYD'.
         l_ddobjname = is_e071_key-obj_name.
         DATA ls_dd40v TYPE dd40v.
         CALL FUNCTION 'DDIF_TTYP_GET'
@@ -1598,10 +1608,10 @@ CLASS zcl_envysis IMPLEMENTATION.
 *        ENDLOOP.
 
         CASE is_e071_key-object.
+          WHEN 'RSPC'.
             "---------------------
             " Process chain
             "---------------------
-          WHEN 'RSPC'.
 *            DATA lt_rspcchain TYPE TABLE OF rspcchain.
 *            FIELD-SYMBOLS <ls_rspcchain> TYPE rspcchain.
 *            SELECT * FROM rspcchain INTO TABLE lt_rspcchain
@@ -1626,10 +1636,10 @@ CLASS zcl_envysis IMPLEMENTATION.
 *ENDIF.
 *ENDDO.
 
+          WHEN 'TRFN'.
             "---------------------
             " transformation
             "---------------------
-          WHEN 'TRFN'.
 ** générer les cas d'emploi du programme généré de la transformation
 *        DATA ls_rstran TYPE rstran.
 ** OBJ_name could be 034QILJDF4LOEOSUXEYPWMS7K6X9K6JU
@@ -1698,6 +1708,113 @@ CLASS zcl_envysis IMPLEMENTATION.
     ENDLOOP.
 
     et_e071_key = gt_e071_key.
+
+  ENDMETHOD.
+
+
+
+  METHOD get_used_objects_multi_levels.
+    TYPES: BEGIN OF ty_tadir,
+             pgmid    TYPE tadir-pgmid,
+             object   TYPE tadir-object,
+             obj_name TYPE tadir-obj_name,
+             devclass TYPE tadir-devclass,
+           END OF ty_tadir,
+           BEGIN OF ty_tdevc,
+             devclass TYPE tdevc-devclass,
+             dlvunit  TYPE tdevc-dlvunit,
+           END OF ty_tdevc.
+    DATA: tdevc_lines TYPE HASHED TABLE OF ty_tdevc WITH UNIQUE KEY devclass.
+    DATA: tadir_lines TYPE HASHED TABLE OF ty_tadir WITH UNIQUE KEY pgmid object obj_name.
+    DATA: lt_e071_key     TYPE HASHED TABLE OF type_s_e071_objkey WITH UNIQUE KEY pgmid object obj_name,
+          lt_e071_key_new TYPE STANDARD TABLE OF type_s_e071_objkey,
+          ls_e071_rel2    TYPE type_s_e071_rel2.
+
+    et_e071_rel2 = value #( ).
+
+    lt_e071_key = VALUE #( ( is_e071_key ) ).
+
+    LOOP AT lt_e071_key REFERENCE INTO DATA(e071_key).
+
+      get_used_objects_first_level(
+        EXPORTING
+          is_e071_key = e071_key->*
+        IMPORTING
+          et_e071_key = DATA(lt_e071_rel) ).
+
+      LOOP AT lt_e071_rel REFERENCE INTO DATA(e071_rel).
+        APPEND VALUE type_s_e071_rel2(
+                object       = e071_key->*
+                soft_or_hard = e071_rel->soft_or_hard
+                subobject    = e071_rel->subobject )
+            TO et_e071_rel2.
+      ENDLOOP.
+
+      lt_e071_key_new = VALUE #( ).
+      LOOP AT lt_e071_rel REFERENCE INTO e071_rel
+            WHERE soft_or_hard = 'H'.
+        DATA(ls_e071_key) = VALUE type_s_e071_objkey(
+            pgmid    = e071_rel->subobject-pgmid
+            object   = e071_rel->subobject-object
+            obj_name = e071_rel->subobject-obj_name ).
+        IF NOT line_exists( lt_e071_key[
+            pgmid    = ls_e071_key-pgmid
+            object   = ls_e071_key-object
+            obj_name = ls_e071_key-obj_name ] ).
+          INSERT ls_e071_key INTO TABLE lt_e071_key_new.
+        ENDIF.
+      ENDLOOP.
+
+      IF lt_e071_key_new IS NOT INITIAL
+            AND excluding IS NOT INITIAL.
+
+        SELECT pgmid, object, obj_name, devclass
+            FROM tadir
+            FOR ALL ENTRIES IN @lt_e071_key_new
+            WHERE pgmid    = @lt_e071_key_new-pgmid
+              AND object   = @lt_e071_key_new-object
+              AND obj_name = @lt_e071_key_new-obj_name(40)
+            INTO TABLE @tadir_lines.
+
+        IF sy-subrc = 0.
+
+          DATA devclasses TYPE TABLE OF tadir-devclass.
+
+          devclasses = VALUE #(
+              FOR GROUPS <devclass> OF <tadir_line> IN tadir_lines
+              GROUP BY <tadir_line>-devclass
+              WITHOUT MEMBERS
+              ( <devclass> ) ).
+
+          SELECT devclass, dlvunit
+              FROM tdevc
+              FOR ALL ENTRIES IN @devclasses
+              WHERE devclass = @devclasses-table_line
+              INTO TABLE @tdevc_lines.
+
+          IF sy-subrc = 0.
+
+            LOOP AT lt_e071_key_new REFERENCE INTO DATA(e071_key_new).
+              ASSIGN tadir_lines[
+                        pgmid    = e071_key_new->pgmid
+                        object   = e071_key_new->object
+                        obj_name = e071_key_new->obj_name ]
+                    TO FIELD-SYMBOL(<tadir_line2>).
+              CHECK sy-subrc = 0.
+              ASSIGN tdevc_lines[ devclass = <tadir_line2>-devclass ] TO FIELD-SYMBOL(<tdevc_line>).
+              CHECK sy-subrc = 0.
+              IF <tdevc_line>-dlvunit IN excluding-software_components.
+                DELETE lt_e071_key_new USING KEY loop_key.
+              ENDIF.
+            ENDLOOP.
+
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      INSERT LINES OF lt_e071_key_new INTO TABLE lt_e071_key.
+
+    ENDLOOP.
 
   ENDMETHOD.
 
@@ -1781,6 +1898,322 @@ CLASS zcl_envysis IMPLEMENTATION.
 *        mac_collect is_e071_key l_link '' ls_e071_key ''.
       ENDIF.
     ENDIF.
+
+  ENDMETHOD.
+
+  METHOD rs_progname_concatenate.
+
+    " Copy of function module RS_PROGNAME_CONCATENATE and
+    " + adaptation of OO part to avoid short dump if object type doesn't exist
+
+    DATA: bool TYPE c LENGTH 1.
+
+    CONSTANTS:
+*      false LIKE bool VALUE 'F',
+*      true  LIKE bool VALUE 'T',
+*      yes   LIKE bool VALUE 'X',
+          no    LIKE bool VALUE ' '.
+
+    CONSTANTS:
+
+      c_menu_progname_praefix_len      "Bereichsmenü
+        TYPE i   VALUE 4,
+      c_menu_progname_praefix(c_menu_progname_praefix_len)
+        TYPE c   VALUE 'MENU',
+
+      c_type_progname_praefix_len      "Type-Pools
+        TYPE i   VALUE 3,
+      c_type_progname_praefix(c_type_progname_praefix_len)
+        TYPE c   VALUE '%_C',
+
+      c_cntx_progname_praefix_len      "Contexte
+        TYPE i   VALUE 10,
+      c_cntx_progname_praefix(c_cntx_progname_praefix_len)
+        TYPE c   VALUE 'CONTEXT_S_',
+
+      c_mst_progname_praefix_len       "alte Tab-pflege
+        TYPE i   VALUE 3,
+      c_mst_progname_praefix(c_mst_progname_praefix_len)
+        TYPE c   VALUE 'MST'.
+
+    DATA: l_program   TYPE rs38l-include,
+          l_namespace TYPE rs38l-namespace,
+          l_area      TYPE rs38l-area,
+          l_name      TYPE trdir-name,
+*        l_obj_name  type sobj_name,
+          l_ooref     TYPE REF TO if_oo_clif_incl_naming.
+
+    l_program   = space.
+    l_namespace = space.
+
+* Programmnamen für Bestandteile von Funktionsgruppenobjekten
+    CLEAR fugr_progname_group.
+    CLEAR fugr_progname_include.
+    IF NOT ( fugr_group IS INITIAL ).
+      l_area = fugr_group.
+      CALL FUNCTION 'FUNCTION_INCLUDE_CONCATENATE'
+        EXPORTING
+          include_number           = fugr_include_number
+        IMPORTING
+          include                  = fugr_progname_include
+          uxx                      = fugr_progname_uxx
+          top                      = fugr_progname_top
+        CHANGING
+          program                  = fugr_progname_group
+          complete_area            = l_area
+        EXCEPTIONS
+          delimiter_wrong_position = 1
+          OTHERS                   = 2.
+      IF sy-subrc = 1.
+        " TODO
+*          MESSAGE e233
+*            RAISING delimiter_error.
+      ENDIF.
+    ENDIF.
+
+
+* Programmnamen für Bestandteile von log. Datenbanken
+    CLEAR sldb_progname_db.
+    CLEAR sldb_progname_sel.
+    IF NOT ( sldb_name IS INITIAL ).
+      CALL FUNCTION 'LDB_CONVERT_LDBNAME_2_DBPROG'
+        EXPORTING
+          ldb_name                  = sldb_name
+          flag_existence_check      = no
+        IMPORTING
+          db_name                   = sldb_progname_db
+          sel_name                  = sldb_progname_sel
+        EXCEPTIONS
+          wrong_position_of_slashes = 1
+          OTHERS                    = 2.
+      IF sy-subrc = 1.
+        " TODO
+*      message e233
+*        raising delimiter_error.
+      ENDIF.
+    ENDIF.
+
+* Programmnamen für Bereichsmenü
+    IF NOT ( menu_name IS INITIAL ).
+      l_name = menu_name.
+      CALL FUNCTION 'RS_NAME_SPLIT_NAMESPACE'
+        EXPORTING
+          name_with_namespace    = l_name
+        IMPORTING
+          namespace              = l_namespace
+          name_without_namespace = l_name
+        EXCEPTIONS
+          delimiter_error        = 1
+          OTHERS                 = 2.
+      IF sy-subrc = 1.
+        " TODO
+*      message e233
+*        raising delimiter_error.
+      ENDIF.
+      CONCATENATE l_namespace
+                  c_menu_progname_praefix
+                  l_name
+             INTO menu_progname.
+    ELSE.
+      CLEAR menu_progname.
+    ENDIF.
+
+* Programmnamen für Type-Pools
+    IF NOT ( type_name IS INITIAL ).
+      l_name = type_name.
+      CALL FUNCTION 'RS_NAME_SPLIT_NAMESPACE'
+        EXPORTING
+          name_with_namespace    = l_name
+        IMPORTING
+          namespace              = l_namespace
+          name_without_namespace = l_name
+        EXCEPTIONS
+          delimiter_error        = 1
+          OTHERS                 = 2.
+      IF sy-subrc = 1.
+        " TODO
+*      message e233
+*        raising delimiter_error.
+      ENDIF.
+      CONCATENATE l_namespace
+                  c_type_progname_praefix
+                  l_name
+             INTO type_progname.
+    ELSE.
+      CLEAR type_progname.
+    ENDIF.
+
+* Programmnamen für Contexte
+    IF NOT ( cntx_name IS INITIAL ).
+      l_name = cntx_name.
+      CALL FUNCTION 'RS_NAME_SPLIT_NAMESPACE'
+        EXPORTING
+          name_with_namespace    = l_name
+        IMPORTING
+          namespace              = l_namespace
+          name_without_namespace = l_name
+        EXCEPTIONS
+          delimiter_error        = 1
+          OTHERS                 = 2.
+      IF sy-subrc = 1.
+        " TODO
+*      message e233
+*        raising delimiter_error.
+      ENDIF.
+      CONCATENATE l_namespace
+                  c_cntx_progname_praefix
+                  l_name
+             INTO cntx_progname.
+    ELSE.
+      CLEAR cntx_progname.
+    ENDIF.
+
+* Programmnamen für (veraltete) Tabellenpflege
+    IF NOT ( mst_name IS INITIAL ).
+      l_name = mst_name.
+      CALL FUNCTION 'RS_NAME_SPLIT_NAMESPACE'
+        EXPORTING
+          name_with_namespace    = l_name
+        IMPORTING
+          namespace              = l_namespace
+          name_without_namespace = l_name
+        EXCEPTIONS
+          delimiter_error        = 1
+          OTHERS                 = 2.
+      IF sy-subrc = 1.
+        " TODO
+*      message e233
+*        raising delimiter_error.
+      ENDIF.
+      CONCATENATE l_namespace
+                  c_mst_progname_praefix
+                  l_name
+             INTO mst_progname.
+    ELSE.
+      CLEAR mst_progname.
+    ENDIF.
+
+* oo
+* class
+    CLEAR clas_progname.
+    IF NOT clas_name IS INITIAL.
+      " STANDARD CODE RAISES NO_OBJECTTYPE IF CLASS POOL DOESN'T EXIST
+*    l_ooref = cl_oo_include_naming=>get_instance_by_name( clas_name ).
+*    clas_progname = l_ooref->pool.
+      TYPES: BEGIN OF ty_progname,
+               main_part TYPE c LENGTH 30,
+               extension TYPE c LENGTH 10,
+             END OF ty_progname.
+      clas_progname = translate(
+            val  = CONV string( VALUE ty_progname( main_part = clas_name extension = 'CP' ) )
+            from = ` `
+            to   = '=' ).
+    ENDIF.
+
+* interface
+    CLEAR intf_progname.
+    IF NOT intf_name IS INITIAL.
+      " STANDARD CODE RAISES NO_OBJECTTYPE IF INTERFACE POOL DOESN'T EXIST
+*    l_ooref = cl_oo_include_naming=>get_instance_by_name( intf_name ).
+*    intf_progname = l_ooref->pool.
+      intf_progname = translate(
+            val  = CONV string( VALUE ty_progname( main_part = intf_name extension = 'IP' ) )
+            from = ` `
+            to   = '=' ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD enhancement_implementation.
+
+    DATA l_include TYPE include.
+    DATA ls_e071_key TYPE type_s_e071_objkey.
+    DATA lo_enh TYPE REF TO if_enh_tool.
+    DATA lo_enh2 TYPE REF TO cl_enh_tool_hook_impl.
+    DATA lo_enh99 TYPE REF TO cl_enh_tool_clif.
+*        DATA l_enhname TYPE enhname.
+    DATA lt_enhobj TYPE TABLE OF enhobj.
+    DATA ls_enhobj TYPE enhobj.
+    DATA l_tool_type TYPE enhtooltype.
+
+*        l_enhname = is_e071_key-obj_name.
+
+    lo_enh = cl_enh_factory=>get_enhancement( enhancement_id = name ).
+
+    l_tool_type = lo_enh->get_tool( ).
+
+    " For a BADI, we'll get ENHS, CLAS, INTF.
+    " For a hook, we'll get the main program (FUGR or PROG or CLAS)
+    " For a class enhancement, we'll get the class name (+ its interfaces + its
+    "   super-classes up to top class) and the enhanced methods (new parameters)
+    " For a function group enhancement, we'll get the function group and the enhanced
+    "   function module (new parameters)
+    SELECT * FROM enhobj INTO TABLE lt_enhobj WHERE enhname = name.
+    LOOP AT lt_enhobj INTO ls_enhobj.
+      ls_e071_key-pgmid    = 'R3TR'.
+      ls_e071_key-object   = ls_enhobj-obj_type.
+      ls_e071_key-obj_name = ls_enhobj-obj_name.
+      collect( soft_or_hard = 'H' y = ls_e071_key ).
+    ENDLOOP.
+
+    CASE l_tool_type.
+      WHEN 'HOOK_IMPL'.
+        lo_enh2 ?= lo_enh.
+        CALL METHOD lo_enh2->get_hook_impls_include
+          IMPORTING
+            include = l_include.
+        CALL METHOD get_include_required_objects
+          EXPORTING
+            i_include = l_include.
+
+      WHEN 'CLASENH'.
+        lo_enh99 ?= lo_enh.
+        CALL METHOD lo_enh99->get_include_name
+          IMPORTING
+            include = l_include.
+        CALL METHOD get_include_required_objects
+          EXPORTING
+            i_include = l_include.
+
+      WHEN 'FUGRENH'.
+        lo_enh99 ?= lo_enh.
+        CALL METHOD lo_enh99->get_include_name
+          IMPORTING
+            include = l_include.
+        CALL METHOD get_include_required_objects
+          EXPORTING
+            i_include = l_include.
+**** TODO
+      WHEN 'BADI_IMPL'.
+*            lo_enh5 ?= lo_enh.
+*          DATA lt_impl TYPE enh_badi_impl_data_it.
+*          DATA ls_impl TYPE LINE OF enh_badi_impl_data_it.
+*          lt_impl = lo_enh5->get_implementations( ).
+*          LOOP AT lt_impl INTO ls_impl.
+**            ls_e071_key-pgmid    = 'R3TR'.
+**            ls_e071_key-object   = 'SXCI'.
+**            ls_e071_key-obj_name = ls_impl-impl_name.
+**            mac_collect is_e071_key 'H' '' ls_e071_key ''.
+*            ls_e071_key-pgmid    = 'R3TR'.
+*            ls_e071_key-object   = 'INTF'.
+*            CONCATENATE 'IF_EX_' ls_impl-impl_name INTO ls_e071_key-obj_name.
+*            mac_collect is_e071_key 'H' '' ls_e071_key ''.
+*            ls_e071_key-pgmid    = 'R3TR'.
+*            ls_e071_key-object   = 'CLAS'.
+*            ls_e071_key-obj_name = ls_impl-impl_class.
+*            mac_collect is_e071_key 'H' '' ls_e071_key ''.
+*          ENDLOOP.
+
+
+      WHEN 'INTFENH'.
+        " TODO
+*            lo_enh6 ?= lo_enh.
+
+      WHEN 'WDYENH'.
+        " TODO
+*            lo_enh7 ?= lo_enh.
+    ENDCASE.
 
   ENDMETHOD.
 
