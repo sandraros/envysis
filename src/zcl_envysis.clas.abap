@@ -3,9 +3,7 @@ CLASS zcl_envysis DEFINITION
   FINAL
   CREATE PUBLIC .
 
-
   PUBLIC SECTION.
-
 
     TYPES ty_e071_objkey TYPE seok_trkey .
     TYPES:
