@@ -17,3 +17,6 @@ analyzer->get_package_used_objects(
     all           = DATA(all)
     tadir_lines_2 = DATA(tadir_lines_2) ).
 ```
+
+# Installation
+requires https://github.com/sandraros/tcode
