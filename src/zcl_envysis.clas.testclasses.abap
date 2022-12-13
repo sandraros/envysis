@@ -288,17 +288,14 @@ CLASS ltc_get_package_used_objects DEFINITION
 
   PRIVATE SECTION.
 
-    METHODS package_contains_nothing FOR TESTING.
-    METHODS one_program_containing_nothing FOR TESTING.
-    METHODS exclude_standard FOR TESTING.
+    METHODS package_contains_nothing FOR TESTING RAISING cx_static_check.
+    METHODS one_program_containing_nothing FOR TESTING RAISING cx_static_check.
+    METHODS exclude_standard FOR TESTING RAISING cx_static_check.
 
     DATA: cut TYPE REF TO zcl_envysis,
           doc TYPE REF TO ltch_doc.
 
-*    class-methods class_setup.
-*    class-methods class_teardown.
-    methods setup.
-*    methods teardown.
+    METHODS setup.
 
 ENDCLASS.
 
@@ -316,16 +313,10 @@ CLASS ltc_get_package_used_objects IMPLEMENTATION.
 
     doc->tadir_lines = VALUE #(
         ( pgmid = 'R3TR' object = 'PROG' obj_name = 'ZPROG' devclass = 'ZDEVC' ) ).
-*    doc->tdevc_lines = VALUE #(
-*        ( devclass = 'ZDEVC' ) ).
-
 
     cut->get_package_used_objects(
       EXPORTING
         packages      = VALUE #( ( sign = 'I' option = 'EQ' low = 'ZDEVC' ) )
-*        " Do not get the used objects of standard objects (= exclude all except HOME/LOCAL)
-*        excluding     = VALUE #( software_components =
-*            VALUE #( sign = 'E' option = 'EQ' ( low = 'HOME' ) ( low = 'LOCAL' ) ) )
       IMPORTING
         all           = DATA(all)
         tadir_lines_2 = DATA(tadir_lines_2) ).
@@ -359,10 +350,7 @@ CLASS ltc_get_package_used_objects IMPLEMENTATION.
     doc->tadir_lines = VALUE #(
         ( pgmid = 'R3TR' object = 'PROG' obj_name = 'ZPROG' devclass = 'ZDEVC' ) ).
     doc->cross_lines = VALUE #(
-        ( INCLUDE = 'ZPROG' NAME = 'GUI_UPLOAD' PROG = 'PROG' TYPE = 'F' ) ).
-*    doc->tdevc_lines = VALUE #(
-*        ( devclass = 'ZDEVC' ) ).
-
+        ( include = 'ZPROG' name = 'GUI_UPLOAD' prog = 'PROG' type = 'F' ) ).
 
     cut->get_package_used_objects(
       EXPORTING

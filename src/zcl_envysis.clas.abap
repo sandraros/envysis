@@ -116,6 +116,8 @@ CLASS zcl_envysis DEFINITION
         object   TYPE tadir-object,
         obj_name TYPE tadir-obj_name,
         devclass TYPE tadir-devclass,
+        softcomp TYPE tdevc-dlvunit,
+        applcomp TYPE df14l-ps_posid,
       END OF ty_tadir .
     TYPES:
       ty_tadir_lines TYPE HASHED TABLE OF ty_tadir WITH UNIQUE KEY pgmid object obj_name .
@@ -163,16 +165,15 @@ CLASS zcl_envysis DEFINITION
     "! @raising zcx_envysis | <p class="shorttext synchronized" lang="en"></p>
     METHODS get_package_used_objects
       IMPORTING
-        !packages      TYPE ty_packages
-        !excluding     TYPE ty_excluding OPTIONAL
-        !levels        TYPE i DEFAULT 0
+        !packages                 TYPE ty_packages
+        !excluding                TYPE ty_excluding OPTIONAL
+        !levels                   TYPE i DEFAULT 0
       EXPORTING
-        !all           TYPE tt_e071_rel2
-        !tadir_lines_2 TYPE ty_tadir_lines
+        !all                      TYPE tt_e071_rel2
+        !tadir_lines_2            TYPE ty_tadir_lines
         !objects_outside_packages TYPE ty_tadir_lines
       RAISING
         zcx_envysis .
-
   PROTECTED SECTION.
 
   PRIVATE SECTION.
@@ -222,7 +223,7 @@ ENDCLASS.
 
 
 
-CLASS zcl_envysis IMPLEMENTATION.
+CLASS ZCL_ENVYSIS IMPLEMENTATION.
 
 
   METHOD build_e071_key.
@@ -371,6 +372,13 @@ CLASS zcl_envysis IMPLEMENTATION.
 *      IMPORTING
 *        typekind = l_typekind.
 *    e_object = l_typekind.
+
+  ENDMETHOD.
+
+
+  METHOD constructor.
+
+    doc = NEW lcl_doc( ).
 
   ENDMETHOD.
 
@@ -877,12 +885,6 @@ CLASS zcl_envysis IMPLEMENTATION.
         IMPORTING
           et_e071_rel2 = DATA(used_objects) ).
 
-*      DATA(objects_left) = get_objects_left_to_analyze(
-*        EXPORTING
-*          i_excluding     = excluding
-*          it_e071_key     = lt_e071_key
-*          it_e071_rel2    = used_objects ).
-
       INSERT LINES OF used_objects INTO TABLE all.
 
     ENDLOOP.
@@ -985,577 +987,6 @@ CLASS zcl_envysis IMPLEMENTATION.
 
     ls_e071_key = is_e071_key.
 
-    IF 0 = 1.
-*    CASE ls_e071_key-object.
-*
-*      WHEN 'DEVC'.
-*        "---------------------
-*        " DEVELOPMENT CLASS
-*        "---------------------
-*        " Only the super-package is considered a "used object".
-*        " NB 1: The sub-packages should not be considered as "used objects",
-*        "   otherwise a sub-package A
-*        "   having a super-package B, having a super-package C, would lead to
-*        "   analyze all objects below the super-package C at all levels.
-*        " NB 2: the objects contained in a package should not be
-*        "   considered as "used objects", otherwise a used object of sub-package A
-*        "   having a super-package B, having a super-package C, would lead to
-*        "   analyze all objects below the super-package C at all levels.
-*        DATA(tdevc_lines) = doc->select_tdevc( devclasses = VALUE #( ( CONV #( is_e071_key-obj_name ) ) ) ).
-*        DATA(parentcl) = VALUE #( tdevc_lines[ devclass = CONV #( is_e071_key-obj_name ) ]-parentcl OPTIONAL ).
-**        SELECT SINGLE parentcl
-**            FROM tdevc
-**            WHERE devclass = @is_e071_key-obj_name
-**              AND parentcl <> @space
-**            INTO @DATA(parentcl).
-*        IF parentcl IS NOT INITIAL.
-*          ls_e071_key-pgmid    = 'R3TR'.
-*          ls_e071_key-object   = 'DEVC'.
-*          ls_e071_key-obj_name = parentcl.
-*          collect( soft_or_hard = 'H' y = ls_e071_key ).
-*        ENDIF.
-**        DATA l_package_name TYPE devclass.
-**        l_package_name = is_e071_key-obj_name.
-**        CALL METHOD get_devc_required_objects
-**          EXPORTING
-**            i_package_name = l_package_name.
-*
-*
-*      WHEN 'TRAN'.
-*        "---------------------
-*        " transaction code
-*        "---------------------
-*
-*        DATA l_tcode TYPE tcode.
-*
-*        l_tcode = is_e071_key-obj_name.
-*
-*        DATA lo_transaction TYPE REF TO zcl_tcode.
-*
-*
-*        DATA(tcode) = doc->get_tcode_required_objects( l_tcode ).
-*
-*        CASE tcode-type.
-*          WHEN 'O'.
-*            IF tcode-s_object-local_class = 'X'.
-*              ls_e071_key-pgmid    = 'R3TR'.
-*              ls_e071_key-object   = 'PROG'.
-*              ls_e071_key-obj_name = tcode-s_object-program_name.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ELSE.
-*              ls_e071_key-pgmid   = 'LIMU'.
-*              ls_wbobj_key-object = 'METH'.
-*              ls_wbobj_key-s_meth-method_name = tcode-s_object-method_name.
-*              ls_wbobj_key-s_meth-class_name = tcode-s_object-global_class_name.
-*              CALL METHOD build_e071_key
-*                EXPORTING
-*                  is_wbobj_key = ls_wbobj_key
-*                CHANGING
-*                  es_e071_key  = ls_e071_key.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDIF.
-*            IF NOT tcode-s_object-auth_object IS INITIAL.
-*              ls_e071_key-pgmid    = 'R3TR'.
-*              ls_e071_key-object   = 'SUSO'.
-*              ls_e071_key-obj_name = tcode-s_object-auth_object.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDIF.
-*          WHEN 'D'.
-*            ls_e071_key-pgmid = 'LIMU'.
-*            ls_wbobj_key-object = 'DYNP'.
-*            ls_wbobj_key-s_dynp-program_name = tcode-s_dialog-program_name.
-*            ls_wbobj_key-s_dynp-screen_number = tcode-s_dialog-screen_number.
-*            CALL METHOD build_e071_key
-*              EXPORTING
-*                is_wbobj_key = ls_wbobj_key
-*              CHANGING
-*                es_e071_key  = ls_e071_key.
-*            collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            IF NOT tcode-s_dialog-auth_object IS INITIAL.
-*              ls_e071_key-pgmid    = 'R3TR'.
-*              ls_e071_key-object   = 'SUSO'.
-*              ls_e071_key-obj_name = tcode-s_dialog-auth_object.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDIF.
-*          WHEN 'P'.
-*            IF NOT tcode-s_parameter-called_tcode IS INITIAL.
-*              ls_e071_key-pgmid    = 'R3TR'.
-*              ls_e071_key-object   = 'TRAN'.
-*              ls_e071_key-obj_name = tcode-s_parameter-called_tcode.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDIF.
-*            IF NOT tcode-s_parameter-program_name IS INITIAL.
-*              ls_e071_key-pgmid   = 'LIMU'.
-*              ls_wbobj_key-object = 'DYNP'.
-*              ls_wbobj_key-s_dynp-program_name = tcode-s_parameter-program_name.
-*              ls_wbobj_key-s_dynp-screen_number = tcode-s_parameter-screen_number.
-*              CALL METHOD build_e071_key
-*                EXPORTING
-*                  is_wbobj_key = ls_wbobj_key
-*                CHANGING
-*                  es_e071_key  = ls_e071_key.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDIF.
-*          WHEN 'V'.
-*            ls_e071_key-pgmid    = 'R3TR'.
-*            ls_e071_key-object   = 'TRAN'.
-*            ls_e071_key-obj_name = tcode-s_variant-called_tcode.
-*            collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            IF NOT tcode-s_variant-transac_variant IS INITIAL.
-*              ls_e071_key-object   = 'STVI'.
-*              ls_e071_key-obj_name = tcode-s_variant-transac_variant.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDIF.
-*          WHEN 'R'.
-*            ls_e071_key-pgmid    = 'R3TR'.
-*            ls_e071_key-object   = 'PROG'.
-*            ls_e071_key-obj_name = tcode-s_report-program_name.
-*            collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            IF NOT tcode-s_report-auth_object IS INITIAL.
-*              ls_e071_key-pgmid    = 'R3TR'.
-*              ls_e071_key-object   = 'SUSO'.
-*              ls_e071_key-obj_name = tcode-s_report-auth_object.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDIF.
-*            IF NOT tcode-s_report-program_variant IS INITIAL.
-*              ls_e071_key-pgmid   = 'LIMU'.
-*              " TODO : could be also VARX (&CUS...)
-*              ls_wbobj_key-object = 'VARI'.
-*              ls_wbobj_key-s_vari-program_name = tcode-s_report-program_name.
-*              ls_wbobj_key-s_vari-variant_name = tcode-s_report-program_variant.
-*              CALL METHOD build_e071_key
-*                EXPORTING
-*                  is_wbobj_key = ls_wbobj_key
-*                CHANGING
-*                  es_e071_key  = ls_e071_key.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDIF.
-*        ENDCASE.
-*
-*      WHEN 'ENHO'.
-*        "---------------------
-*        " ENHANCEMENT Implementation
-*        "---------------------
-*        enhancement_implementation( name = CONV enhname( is_e071_key-obj_name ) ).
-*
-*      WHEN 'PROG' OR 'REPS' OR 'REPO'.
-*        "---------------------
-*        " PROGRAM
-*        "---------------------
-*        CASE ls_e071_key-object.
-*          WHEN 'REPS' OR 'REPO'.
-*            l_subc = doc->select_trdir( CONV #( is_e071_key-obj_name ) ).
-*            CASE l_subc.
-*              WHEN '1' OR 'M' OR 'F' OR 'S' OR 'K'.
-*                ls_e071_key-pgmid    = 'LIMU'.
-*                ls_e071_key-object   = 'REPT'.
-*                ls_e071_key-obj_name = is_e071_key-obj_name.
-*                collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDCASE.
-*        ENDCASE.
-*        l_include = is_e071_key-obj_name.
-*        CALL METHOD get_include_required_objects
-*          EXPORTING
-*            i_include = l_include.
-*
-*      WHEN 'INTF' OR 'INTD'.
-*        "---------------------
-*        " interface pool
-*        "---------------------
-*        DATA l_interface_name TYPE seoclass-clsname.
-*        l_interface_name = is_e071_key-obj_name.
-*        doc->rs_progname_concatenate(
-*          EXPORTING
-*            intf_name       = l_interface_name
-*          IMPORTING
-*            intf_progname   = l_include ).
-*        CALL METHOD get_include_required_objects
-*          EXPORTING
-*            i_include = l_include.
-*
-*      WHEN 'CLAS'.
-*        "---------------------
-*        " class pool
-*        "---------------------
-*        DATA l_class_name TYPE seoclass-clsname.
-*        l_class_name = is_e071_key-obj_name.
-*        doc->rs_progname_concatenate(
-*          EXPORTING
-*            clas_name       = l_class_name
-*          IMPORTING
-*            clas_progname   = l_include ).
-*        CALL METHOD get_include_required_objects
-*          EXPORTING
-*            i_include = l_include.
-*
-*      WHEN 'METH'.
-*        "---------------------
-*        " method
-*        "---------------------
-*        ls_wbobj_key-s_meth = is_e071_key-obj_name.
-*        cl_oo_classname_service=>get_method_include(
-*          EXPORTING
-*            mtdkey                = VALUE seocpdkey(
-*                clsname = ls_wbobj_key-s_meth-class_name
-*                cpdname = ls_wbobj_key-s_meth-method_name )
-*            with_enhancements     = 'X'
-*            with_alias_resolution = 'X'
-*          RECEIVING
-*            result                = l_include
-*          EXCEPTIONS
-*            class_not_existing    = 1
-*            method_not_existing   = 2
-*            OTHERS                = 3 ).
-*        IF sy-subrc = 0.
-*          CALL METHOD get_include_required_objects
-*            EXPORTING
-*              i_include = l_include.
-*        ENDIF.
-*
-*      WHEN 'FUNC'.
-*        "---------------------
-*        " function
-*        "---------------------
-*        DATA l_funcname TYPE rs38l-name.
-*        l_funcname = ls_e071_key-object.
-*        l_include = doc->function_exists( l_funcname ).
-*        IF l_include IS NOT INITIAL.
-*          CALL METHOD get_include_required_objects
-*            EXPORTING
-*              i_include = l_include.
-*        ENDIF.
-*
-*      WHEN 'TYPE' OR 'TYPD'.
-*        "---------------------
-*        " TYPE-POOL
-*        "---------------------
-*        DATA l_type_name TYPE trdir-name.
-*        l_type_name = is_e071_key-obj_name.
-*        doc->rs_progname_concatenate(
-*          EXPORTING
-*            type_name       = l_type_name
-*          IMPORTING
-*            type_progname   = l_include ).
-*        CALL METHOD get_include_required_objects
-*          EXPORTING
-*            i_include = l_include.
-*
-*      WHEN 'FUGT'.
-*        "---------------------
-*        " FUNCTION GROUP
-*        "---------------------
-*        ls_e071_key-pgmid    = 'R3TR'.
-*        ls_e071_key-object   = 'FUGR'.
-*        ls_e071_key-obj_name = is_e071_key-obj_name.
-*        collect( soft_or_hard = 'H' y = ls_e071_key ).
-*
-*      WHEN 'FUGR'.
-*        DATA l_function_group TYPE rs38l-area.
-*        l_function_group = is_e071_key-obj_name.
-*        doc->rs_progname_concatenate(
-*          EXPORTING
-*            fugr_group          = l_function_group
-*          IMPORTING
-*            fugr_progname_group = l_include ).
-*        CALL METHOD get_include_required_objects
-*          EXPORTING
-*            i_include = l_include.
-*
-*      WHEN 'TABT'.
-*        "---------------------
-*        " TABLE or STRUCTURE
-*        "---------------------
-*        ls_e071_key-pgmid    = 'R3TR'.
-*        ls_e071_key-object   = 'TABL'.
-*        ls_e071_key-obj_name = is_e071_key-obj_name.
-*        collect( soft_or_hard = 'H' y = ls_e071_key ).
-*
-*      WHEN 'TABL' OR 'TABD'.
-*        DATA l_name TYPE ddobjname.
-*        l_name = is_e071_key-obj_name.
-*        doc->ddif_tabl_get(
-*              EXPORTING
-*                name = l_name
-*              IMPORTING
-*                et_dd03p = lt_dd03p
-*                et_dd08v = lt_dd08v
-*                et_dd35v = lt_dd35v ).
-*        IF sy-subrc = 0.
-*          " Fields : data elements, domaines, tables de contrôles
-*          LOOP AT lt_dd03p ASSIGNING <ls_dd03p>.
-*            tablstruc_field(
-*                is_dd03l    = CORRESPONDING #( <ls_dd03p> )
-*                is_e071_key = is_e071_key ).
-*
-*            IF NOT <ls_dd03p>-checktable IS INITIAL.
-*              ls_e071_key-pgmid    = 'R3TR'.
-*              ls_e071_key-object   = 'TABL'.
-*              ls_e071_key-obj_name = <ls_dd03p>-checktable.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDIF.
-*          ENDLOOP.
-*          " Foreign keys
-*          LOOP AT lt_dd08v ASSIGNING <ls_dd08v>.
-*            ls_e071_key-pgmid    = 'R3TR'.
-*            ls_e071_key-object   = 'TABL'.
-*            ls_e071_key-obj_name = <ls_dd08v>-checktable.
-*            collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          ENDLOOP.
-*          " Search helps
-*          LOOP AT lt_dd35v ASSIGNING <ls_dd35v>.
-*            IF NOT <ls_dd35v>-shlpname IS INITIAL.
-*              ls_e071_key-pgmid    = 'R3TR'.
-*              ls_e071_key-object   = 'SHLP'.
-*              ls_e071_key-obj_name = <ls_dd35v>-shlpname.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDIF.
-*          ENDLOOP.
-*        ENDIF.
-*
-*      WHEN 'VIEW' OR 'VIED'.
-*        "---------------------
-*        " VIEW
-*        "---------------------
-*        l_ddobjname = is_e071_key-obj_name.
-*        lt_dd26v = doc->ddif_view_get( l_ddobjname ).
-*        IF sy-subrc = 0.
-*          LOOP AT lt_dd26v INTO ls_dd26v.
-*            ls_e071_key-pgmid    = 'R3TR'.
-*            ls_e071_key-object   = 'TABL'.
-*            ls_e071_key-obj_name = ls_dd26v-tabname.
-*            collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          ENDLOOP.
-*        ENDIF.
-*
-*      WHEN 'TTYP' OR 'TTYD'.
-*        "---------------------
-*        " TABLE TYPE
-*        "---------------------
-*        l_ddobjname = is_e071_key-obj_name.
-*        DATA ls_dd40v TYPE dd40v.
-*        ls_dd40v = doc->ddif_ttyp_get( l_ddobjname ).
-*        IF sy-subrc = 0.
-*          ls_e071_key-pgmid    = 'R3TR'.
-*          doc->ddif_typeinfo_get(
-*            EXPORTING
-*              typename = ls_dd40v-rowtype
-*            IMPORTING
-*              typekind  = ls_e071_key-object ).
-*          ls_e071_key-obj_name = ls_dd40v-rowtype.
-*          collect( soft_or_hard = 'H' y = ls_e071_key ).
-*        ENDIF.
-*
-*      WHEN 'DTEL' OR 'DTED'.
-*        "---------------------
-*        " DATA ELEMENT
-*        "---------------------
-*        l_rollname = is_e071_key-obj_name.
-*        DATA ls_tpara TYPE tpara.
-*        doc->ddif_dtel_get(
-*              EXPORTING
-*                rollname = l_rollname
-*              IMPORTING
-*                dd04v = ls_dd04v
-*                tpara = ls_tpara ).
-*        IF sy-subrc = 0.
-*          IF NOT ls_dd04v-domname IS INITIAL.
-*            ls_e071_key-pgmid    = 'R3TR'.
-*            ls_e071_key-object   = 'DOMA'.
-*            ls_e071_key-obj_name = ls_dd04v-domname.
-*            collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          ENDIF.
-*          IF NOT ls_dd04v-shlpname IS INITIAL.
-*            ls_e071_key-pgmid    = 'R3TR'.
-*            ls_e071_key-object   = 'SHLP'.
-*            ls_e071_key-obj_name = ls_dd04v-shlpname.
-*            collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          ENDIF.
-*          IF NOT ls_tpara-paramid IS INITIAL.
-*            ls_e071_key-pgmid    = 'R3TR'.
-*            ls_e071_key-object   = 'PARA'.
-*            ls_e071_key-obj_name = ls_tpara-paramid.
-*            collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          ENDIF.
-*        ENDIF.
-*
-*      WHEN 'DOMA' OR 'DOMD'.
-*        "---------------------
-*        " DOMAIN
-*        "---------------------
-*        l_domname = is_e071_key-obj_name.
-*        ls_dd01v = doc->ddif_doma_get( l_domname ).
-*        IF sy-subrc = 0.
-*          IF NOT ls_dd01v-entitytab IS INITIAL.
-*            ls_e071_key-pgmid    = 'R3TR'.
-*            ls_e071_key-object   = 'TABL'.
-*            ls_e071_key-obj_name = ls_dd01v-entitytab.
-*            collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          ENDIF.
-*        ENDIF.
-*
-*      WHEN 'SHLP' OR 'SHLD'.
-*        "---------------------
-*        " SEARCH HELP
-*        "---------------------
-*        l_shlpname = is_e071_key-obj_name.
-*        ls_dd30v = doc->ddif_shlp_get( l_shlpname ).
-*        IF sy-subrc = 0.
-*          IF NOT ls_dd30v-selmethod IS INITIAL.
-*            doc->ddif_typeinfo_get(
-*              EXPORTING
-*                typename = ls_dd30v-selmethod
-*              IMPORTING
-*                typekind  = l_object ).
-*            ls_e071_key-object   = l_object.
-*            ls_e071_key-obj_name = ls_dd30v-selmethod.
-*            collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          ENDIF.
-*          IF NOT ls_dd30v-texttab IS INITIAL.
-*            ls_e071_key-pgmid    = 'R3TR'.
-*            ls_e071_key-object   = 'TABL'.
-*            ls_e071_key-obj_name = ls_dd30v-texttab.
-*            collect( soft_or_hard = 'H' y = ls_e071_key ).
-*          ENDIF.
-*        ENDIF.
-*
-*      WHEN 'ENQU'.
-*        "---------------------
-*        " LOCK OBJECT
-*        "---------------------
-*        l_lockobject = is_e071_key-obj_name.
-*        ls_dd25v = doc->ddif_enqu_get( l_lockobject ).
-*        IF sy-subrc = 0.
-*          ls_e071_key-pgmid    = 'R3TR'.
-*          ls_e071_key-object   = 'TABL'.
-*          ls_e071_key-obj_name = ls_dd25v-roottab.
-*          collect( soft_or_hard = 'H' y = ls_e071_key ).
-*        ENDIF.
-*
-*      WHEN 'IOBC' "infoObject catalog
-*        OR 'IOBJ' "infoObject
-*        OR 'RSPC' "process chain
-*        OR 'TRFN' "transformation
-*        OR 'AREA' "infoArea
-*        OR 'APCO' "Application Components
-*        OR 'ODSO' "Data Store Object
-*        OR 'ROUT' "ABAP code (routine)
-*        OR 'TRCS'."infoSource
-*
-*        "---------------------
-*        " BI objects
-*        "---------------------
-*        DATA lo_awb TYPE REF TO cl_rso_repository.
-*        TYPE-POOLS: rs, rsoc.
-*        DATA: l_collect_grouping TYPE rso_collect_grouping,
-*              lt_object          TYPE rso_t_tlogo,
-*              ls_object          TYPE rso_s_tlogo,
-*              l_search_levels    TYPE i,
-*              lth_association    TYPE rso_th_association.
-*        FIELD-SYMBOLS: <ls_association> TYPE rso_s_association,
-*                       <ls_object>      TYPE rso_s_tlogo_objref_proxy.
-*
-*
-*        lo_awb = cl_rso_repository=>get_repository( ).
-*        REFRESH lt_object.
-*        ls_object-tlogo = is_e071_key-object.
-*        ls_object-objnm = is_e071_key-obj_name.
-*        APPEND ls_object TO lt_object.
-*        l_collect_grouping = rsoc_c_collect_grouping-required."Only necessary objects
-*        l_search_levels = 2.
-*        REFRESH lth_association.
-*        CALL METHOD lo_awb->transport_wizard
-*          EXPORTING
-*            i_t_object         = lt_object
-*            i_collect_grouping = l_collect_grouping
-*            i_search_level     = l_search_levels
-*          IMPORTING
-*            e_th_association   = lth_association
-*          EXCEPTIONS
-*            object_not_found   = 0.
-*        IF sy-subrc = 0.
-*          READ TABLE lth_association ASSIGNING <ls_association>
-*                WITH TABLE KEY
-*                  tlogo   = ls_object-tlogo
-*                  objnm   = ls_object-objnm
-*                  objvers = 'A'.
-*          IF sy-subrc = 0.
-*            LOOP AT <ls_association>-objects ASSIGNING <ls_object>.
-*              ls_e071_key-pgmid    = 'R3TR'.
-*              ls_e071_key-object   = <ls_object>-tlogo.
-*              ls_e071_key-obj_name = <ls_object>-objnm.
-*              collect( soft_or_hard = 'H' y = ls_e071_key ).
-*            ENDLOOP.
-*          ENDIF.
-*        ENDIF.
-*** ajouter tous les infoObjets qu'il contient
-**        DATA lt_rsdiobciobj TYPE TABLE OF rsdiobciobj.
-**        FIELD-SYMBOLS <ls_rsdiobciobj> TYPE rsdiobciobj.
-**        SELECT * FROM rsdiobciobj INTO TABLE lt_rsdiobciobj
-**              WHERE infoobjcat = is_e071_key-obj_name
-**                AND objvers    = 'A'.
-**        LOOP AT lt_rsdiobciobj ASSIGNING <ls_rsdiobciobj>.
-**          ls_e071_key-pgmid    = 'R3TR'.
-**          ls_e071_key-object   = 'IOBJ'.
-**          ls_e071_key-obj_name = <ls_rsdiobciobj>-iobjnm.
-**          mac_collect is_e071_key 'H' '' ls_e071_key ''.
-**        ENDLOOP.
-*
-*        CASE is_e071_key-object.
-*          WHEN 'RSPC'.
-*            "---------------------
-*            " Process chain
-*            "---------------------
-**            DATA lt_rspcchain TYPE TABLE OF rspcchain.
-**            FIELD-SYMBOLS <ls_rspcchain> TYPE rspcchain.
-**            SELECT * FROM rspcchain INTO TABLE lt_rspcchain
-**                  WHERE chain_id = is_e071_key-obj_name
-**                    AND objvers  = 'A'.
-**            LOOP AT lt_rspcchain ASSIGNING <ls_rspcchain>.
-**            ENDLOOP.
-**READ TABLE lt_rspcchain ASSIGNING <ls_rspcchain>
-**      WITH KEY
-**        type = 'TRIGGER'.
-**IF SY-subrc = 0.
-**DO.
-** <ls_rspcchain>-event IS NOT INITIAL.
-**IF <ls_rspcchain>-next IS INITIAL.
-**  EXIT.
-**ENDIF.
-**READ TABLE lt_rspcchain ASSIGNING <ls_rspcchain>
-**      WITH KEY
-**        type = 'TRIGGER'.
-**IF SY-subrc <> 0.
-**  EXIT.
-**ENDIF.
-**ENDDO.
-*
-*          WHEN 'TRFN'.
-*            "---------------------
-*            " transformation
-*            "---------------------
-*** générer les cas d'emploi du programme généré de la transformation
-**        DATA ls_rstran TYPE rstran.
-*** OBJ_name could be 034QILJDF4LOEOSUXEYPWMS7K6X9K6JU
-**        SELECT SINGLE * FROM rstran INTO ls_rstran
-**              WHERE tranid = is_e071_key-obj_name
-**                AND objvers = 'A'.
-**        IF sy-subrc = 0.
-*** rstran-tranprog could be 3KHXIECTOI8OJA7D9NQTQZIWB
-*** prog -> GP3KHXIECTOI8OJA7D9NQTQZIWB
-**          SUBMIT saprseui
-**                WITH repname = l_include
-**                AND RETURN.
-**          CONCATENATE 'GP' ls_rstran-tranprog INTO l_include.
-**          ls_e071_key-pgmid    = 'R3TR'.
-**          ls_e071_key-object   = 'PROG'.
-**          ls_e071_key-obj_name = l_include.
-**          mac_collect is_e071_key 'H' '' ls_e071_key ''.
-**        ENDIF.
-*        ENDCASE.
-*
-*    ENDCASE.
-    ENDIF.
-
     "---------------------
     " ENVIRONMENT ANALYSIS
     "---------------------
@@ -1581,7 +1012,10 @@ CLASS zcl_envysis IMPLEMENTATION.
 
     FIELD-SYMBOLS <ls_envi> TYPE senvi.
 
-    LOOP AT lt_envi ASSIGNING <ls_envi>.
+    " Omit single enhancement implementations (ENHO) which are defined upon the requested object,
+    " because they are not part of the object.
+    LOOP AT lt_envi ASSIGNING <ls_envi>
+        WHERE type <> 'ENHO'.
       l_object = <ls_envi>-type.
       CALL FUNCTION 'TR_GET_PGMID_FOR_OBJECT'
         EXPORTING
@@ -1725,11 +1159,4 @@ CLASS zcl_envysis IMPLEMENTATION.
     ENDIF.
 
   ENDMETHOD.
-
-  METHOD constructor.
-
-    doc = NEW lcl_doc( ).
-
-  ENDMETHOD.
-
 ENDCLASS.

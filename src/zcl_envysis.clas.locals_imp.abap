@@ -464,12 +464,16 @@ CLASS lcl_doc IMPLEMENTATION.
 
     IF it_e071_key_new IS NOT INITIAL.
 
-      SELECT pgmid, object, obj_name, devclass
+      SELECT tadir~pgmid, tadir~object, tadir~obj_name, tadir~devclass, tdevc~dlvunit AS softcomp, df14l~ps_posid AS applcomp
           FROM tadir
+          LEFT OUTER JOIN tdevc
+            ON tdevc~devclass = tadir~devclass
+          LEFT OUTER JOIN df14l
+            ON df14l~fctr_id = tdevc~component
           FOR ALL ENTRIES IN @it_e071_key_new
-          WHERE pgmid    = @it_e071_key_new-pgmid
-            AND object   = @it_e071_key_new-object
-            AND obj_name = @it_e071_key_new-obj_name(40)
+          WHERE tadir~pgmid    = @it_e071_key_new-pgmid
+            AND tadir~object   = @it_e071_key_new-object
+            AND tadir~obj_name = @it_e071_key_new-obj_name(40)
           INTO TABLE @tadir_lines.
 
     ENDIF.
